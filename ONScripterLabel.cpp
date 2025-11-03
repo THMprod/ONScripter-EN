@@ -1139,15 +1139,54 @@ int ONScripterLabel::init()
         setSavePath(path);
         delete[] path;
 #elif defined LINUX
-        // On Linux (and similar *nixen), place in ~/.gameid
-        passwd* pwd = getpwuid(getuid());
-        if (pwd) {
-            script_h.save_path = new char[strlen(pwd->pw_dir) + strlen(gameid) + 4];
-            sprintf(script_h.save_path, "%s%c.%s%c", 
-                    pwd->pw_dir, DELIMITER, gameid, DELIMITER);
-            mkdir(script_h.save_path, 0755);
+    // On Linux, check for legacy ~/.gameid first, then fall back to XDG (~/.local/share/gameid)
+    passwd* pwd = getpwuid(getuid());
+    if (pwd) {
+        // 1. Construire le chemin legacy (~/.gameid)
+        char* legacy_path = new char[strlen(pwd->pw_dir) + strlen(gameid) + 3]; // "/.gameid\0"
+        sprintf(legacy_path, "%s/.%s", pwd->pw_dir, gameid);
+
+        // 2. Vérifier si le dossier legacy existe
+        struct stat st;
+        if (stat(legacy_path, &st) == 0 && S_ISDIR(st.st_mode)) {
+            // Le dossier legacy existe, l'utiliser
+            script_h.save_path = legacy_path;
+        } else {
+            // 3. Sinon, utiliser XDG_DATA_HOME (~/.local/share/gameid)
+            delete[] legacy_path; // Libérer le chemin legacy inutilisé
+
+            // Récupérer XDG_DATA_HOME (ou utiliser la valeur par défaut)
+            const char* xdg_data_home = getenv("XDG_DATA_HOME");
+            const char* local_share_path;
+
+            if (xdg_data_home) {
+                local_share_path = xdg_data_home;
+            } else {
+                // Construire ~/.local/share/
+                local_share_path = new char[strlen(pwd->pw_dir) + 18]; // "/.local/share\0"
+                sprintf((char*)local_share_path, "%s/.local/share", pwd->pw_dir);
+            }
+
+            // Construire le chemin final : ~/.local/share/gameid/
+            script_h.save_path = new char[strlen(local_share_path) + strlen(gameid) + 2]; // "/gameid\0"
+            sprintf(script_h.save_path, "%s/%s", local_share_path, gameid);
+
+            // Créer le répertoire (avec création récursive si nécessaire)
+            // Note : On suppose que ~/.local/share/ existe déjà (créé par le système)
+            if (mkdir(script_h.save_path, 0755) != 0 && errno != EEXIST) {
+                // Échec de la création, utiliser un chemin de repli
+                delete[] script_h.save_path;
+                if (!xdg_data_home) delete[] (char*)local_share_path; // Libérer si alloué
+                setSavePath(archive_path.get_path(0));
+            } else if (!xdg_data_home) {
+                // Libérer local_share_path si alloué dynamiquement
+                delete[] (char*)local_share_path;
+            }
         }
-        else setSavePath(archive_path.get_path(0));
+    } else {
+        // Échec de getpwuid, utiliser un chemin de repli
+        setSavePath(archive_path.get_path(0));
+    }
 #else
         // Fall back on default ONScripter behaviour if we don't have
         // any better ideas.
@@ -1227,7 +1266,7 @@ int ONScripterLabel::init()
 #if defined(MACOSX)
     char* macos_font_file;
     NSFileManager *fm = [NSFileManager defaultManager];
-    NSString *hiraginoPath = @"/System/Library/Fonts/ヒラギノ丸コ�? ProN W4.ttc";
+    NSString *hiraginoPath = @"/System/Library/Fonts/ãã©ã­ããä¸¸ã³ã? ProN W4.ttc";
     if ([fm fileExistsAtPath:hiraginoPath])
     {
         macos_font_file = new char[ strlen([hiraginoPath UTF8String]) + 1 ];
