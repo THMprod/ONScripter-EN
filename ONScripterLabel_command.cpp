@@ -1138,8 +1138,10 @@ int ONScripterLabel::setwindow4Command()
     setwindowCore(false);
 
     bool lbflush = script_h.readInt()?true:false;
-    int rtl = script_h.readInt();
-    sentence_font.is_rtl = (rtl == 1);
+    if ( script_h.getEndStatus() & ScriptHandler::END_COMMA )
+        sentence_font.is_rtl = (script_h.readInt() == 1);
+    else
+        sentence_font.is_rtl = false;
 
     if (lbflush) {
         lookbackflushCommand();
