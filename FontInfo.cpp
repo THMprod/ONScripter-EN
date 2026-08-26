@@ -71,6 +71,7 @@ void Fontinfo::reset()
     is_shadow = true;
     is_transparent = true;
     is_newline_accepted = false;
+    is_rtl = false;
 }
 
 void *Fontinfo::openFont( char *font_file, int ratio1, int ratio2 )
@@ -124,6 +125,11 @@ int Fontinfo::getRemainingLine()
 
 int Fontinfo::x(int encoding)
 {
+    if (is_rtl && encoding == Encoding::CODE_UTF8) {
+        // RTL: text is drawn from the right edge of the text area
+        int right_edge = top_xy[0] + num_xy[0];
+        return right_edge - xy[0] + line_offset_xy[0] + ruby_offset_xy[0];
+    }
     if (encoding == Encoding::CODE_CP932)
         // Multiplies current column by character pixel count to get offset
         return xy[0]*pitch_xy[0]/2 + top_xy[0] + line_offset_xy[0] + ruby_offset_xy[0];
@@ -234,6 +240,11 @@ SDL_Rect Fontinfo::calcUpdatedArea(int start_xy[2], int ratio1, int ratio2, int 
             if (encoding == Encoding::CODE_CP932) {
                 rect.x = top_xy[0] + pitch_xy[0]*start_xy[0]/2;
                 rect.w = pitch_xy[0]*(xy[0]-start_xy[0])/2+1;
+            } else if (is_rtl) {
+                // RTL: positions are relative to right edge
+                int right_edge = top_xy[0] + num_xy[0];
+                rect.x = right_edge - xy[0];
+                rect.w = xy[0] - start_xy[0] + 1;
             } else {
                 rect.x = top_xy[0] + start_xy[0];
                 rect.w = xy[0] - start_xy[0] + 1;
@@ -241,10 +252,15 @@ SDL_Rect Fontinfo::calcUpdatedArea(int start_xy[2], int ratio1, int ratio2, int 
             }
         }
         else{
-            rect.x = top_xy[0];
             if (encoding == Encoding::CODE_CP932) {
+                rect.x = top_xy[0];
                 rect.w = pitch_xy[0]*num_xy[0];
+            } else if (is_rtl) {
+                int right_edge = top_xy[0] + num_xy[0];
+                rect.x = right_edge - xy[0];
+                rect.w = xy[0] - start_xy[0];
             } else {
+                rect.x = top_xy[0];
                 // My rehashed analysis: top_xy is based on Fontinfo::xy
                 // and so it will naturally contain either columns or px
                 // depending on the encoding in use :D

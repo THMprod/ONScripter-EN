@@ -51,6 +51,7 @@ public:
     bool is_shadow;
     bool is_transparent;
     bool is_newline_accepted;
+    bool is_rtl;
     uchar3  window_color;
 
     int line_offset_xy[2]; // ruby offset for each line
